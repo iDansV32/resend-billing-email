@@ -55,6 +55,20 @@ npm install --save-dev react-email @react-email/ui
   second one now.** If you skip it, the preview server stops on a prompt asking to install it, which is
   confusing the first time and breaks any non-interactive setup.
 
+If your first build warns that Next.js ignored a `package-lock.json` outside the project, pin the root in
+`next.config.ts`. Turbopack walks up the filesystem looking for a lockfile and can settle on an unrelated one:
+
+```ts
+import path from 'node:path';
+import type { NextConfig } from 'next';
+
+const nextConfig: NextConfig = {
+  turbopack: { root: path.resolve(__dirname) },
+};
+
+export default nextConfig;
+```
+
 Add the preview script to `package.json`:
 
 ```json
@@ -98,7 +112,7 @@ that documents what the project needs. Add a negation so the example is committe
 React Email lets you write an email as a React component instead of hand-writing nested HTML tables. It
 renders to the HTML that email clients actually understand.
 
-Create `emails/billing-failure.tsx`. The full component is in this repo; the parts that matter:
+Create `emails/billing-failure.tsx`:
 
 ```tsx
 import { Body, Container, Head, Heading, Html, Preview, Text } from '@react-email/components';
@@ -118,8 +132,34 @@ export default function BillingFailureEmail({ amountDue = '$49.00' }) {
   );
 }
 
-const body = { backgroundColor: '#f4f4f5', margin: 0, padding: '32px 0' };
 ```
+
+<details>
+<summary>The style objects used above</summary>
+
+```tsx
+const body = {
+  backgroundColor: '#f4f4f5',
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  margin: 0,
+  padding: '32px 0',
+};
+
+const container = {
+  backgroundColor: '#ffffff',
+  border: '1px solid #e4e4e7',
+  borderRadius: '8px',
+  margin: '0 auto',
+  maxWidth: '560px',
+  padding: '40px',
+};
+
+const heading = { color: '#18181b', fontSize: '22px', fontWeight: 600, lineHeight: '30px', margin: '0 0 24px' };
+const paragraph = { color: '#3f3f46', fontSize: '15px', lineHeight: '24px', margin: '0 0 16px' };
+```
+
+The complete file, including the call-to-action and footer styles, is in this repo.
+</details>
 
 Three things worth knowing:
 
@@ -143,7 +183,61 @@ can show you the desktop and mobile renderings side by side.
 **Do this before every send.** It is much faster than sending yourself twenty test emails, and your sending
 reputation does not care how many of them were tests.
 
-## 6. Send it
+## 6. Build the page that triggers it
+
+Replace `app/page.tsx`. This is deliberately plain: one input, one button, and it shows you whatever the API
+says rather than a generic failure message.
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+
+export default function Home() {
+  const [to, setTo] = useState('');
+  const [status, setStatus] = useState('');
+
+  async function send(event: React.FormEvent) {
+    event.preventDefault();
+    setStatus('Sending...');
+
+    const response = await fetch('/api/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to }),
+    });
+    const payload = await response.json();
+
+    setStatus(
+      response.ok
+        ? `Sent. Message id ${payload.id}`
+        : String(payload?.error?.message ?? payload?.error ?? 'Request failed.'),
+    );
+  }
+
+  return (
+    <main style={{ padding: 40, fontFamily: 'system-ui' }}>
+      <h1>Send the billing failure email</h1>
+      <form onSubmit={send}>
+        <input
+          type="email"
+          required
+          value={to}
+          onChange={(event) => setTo(event.target.value)}
+          placeholder="you@example.com"
+        />
+        <button type="submit">Send email</button>
+      </form>
+      <p>{status}</p>
+    </main>
+  );
+}
+```
+
+**Show the API's own error rather than replacing it with your own.** When this goes wrong, the difference
+between a 403 and a 422 is the whole answer, and a friendly "something went wrong" throws it away.
+
+## 7. Send it
 
 Create `app/api/send/route.ts`:
 
@@ -176,9 +270,13 @@ Edge runtime.
 **Keep the `id` that comes back.** It is how you find this exact message in the dashboard later, which is the
 first thing you will want when a customer says they never received it.
 
-## 7. Attach the invoice
+## 8. Attach the invoice
 
 A billing email that says "your invoice is attached" should attach the invoice.
+
+Create an `invoices/` folder and put a PDF in it named `INV-2026-0814.pdf`. Any PDF will do while you are
+following along; this repo includes a generated one. **If the file is not there, `readFile` throws `ENOENT`
+and the send never happens**, which is a confusing failure because nothing about it mentions email.
 
 ```ts
 import { readFile } from 'node:fs/promises';
@@ -198,7 +296,7 @@ the simplest thing that works when the file is already local.
 There is a size limit on the whole message, so generated PDFs are fine and video is not. If you are attaching
 something large, link to it instead.
 
-## 8. Check it actually arrived
+## 9. Check it actually arrived
 
 Run it:
 
