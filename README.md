@@ -13,7 +13,7 @@ with the invoice attached.
 
 ## Before you start
 
-- **Node 20 or newer.** `node -v` to check.
+- **Node 20.9 or newer**, which is what Next.js 16 requires. `node -v` to check.
 - **A Resend account.** Free, and enough for everything here.
 - **An API key**, from [resend.com/api-keys](https://resend.com/api-keys). Copy it when it is created,
   because it is only shown once.
@@ -293,8 +293,10 @@ await resend.emails.send({
 `content` takes a Buffer, or a base64 string, or you can pass a `path` and let Resend fetch it. A Buffer is
 the simplest thing that works when the file is already local.
 
-There is a size limit on the whole message, so generated PDFs are fine and video is not. If you are attaching
-something large, link to it instead.
+**The whole message, attachments included, must be under 40MB after Base64 encoding**, which is roughly a
+third smaller than 40MB of raw file. Not every file type is accepted. And **attachments do not work on the
+batch endpoint at all**, so anything with an invoice goes through the single-send path. If a file is large,
+link to it instead of attaching it.
 
 ## 9. Check it actually arrived
 
@@ -320,21 +322,30 @@ email sent when it bounced an hour later.
 The example above works. Here is what changes when it is real.
 
 **Verify a domain.** Sending from `onboarding@resend.dev` is for testing. In production you send from your
-own domain, which means three DNS records:
+own domain. Resend's verification sets up **SPF and DKIM**; **DMARC is optional and worth adding anyway**.
 
-- **SPF** lists who is allowed to send on your behalf. Without it, receivers cannot tell your mail from
-  someone spoofing you.
-- **DKIM** signs each message so the receiver can prove it was not altered in transit.
-- **DMARC** tells receivers what to do when SPF or DKIM fail, and gets you reports about who is sending as
-  you.
+- **SPF** authorises which servers may send for the envelope domain. It is one signal among several, not
+  the only thing standing between you and a spoofer.
+- **DKIM** signs each message so a receiver can prove it was not altered in transit.
+- **DMARC** ties those to the visible `From:` address through **alignment**, and tells receivers what to do
+  when neither aligned mechanism passes.
+
+**The word that matters is alignment, and it is where most explanations go wrong.** DMARC passes if *either*
+aligned SPF *or* aligned DKIM passes. It only fails when both fail. That is not academic: this project sends
+from a subdomain with a DKIM record and no SPF record of its own, and DMARC passes on DKIM alignment alone.
 
 **Separate transactional mail from marketing.** Use a different subdomain, for example `billing.yourdomain.com`
 for this and `news.yourdomain.com` for campaigns. Reputation is tracked per domain. **If a marketing send goes
 badly, you do not want it taking your payment emails to spam with it**, and a billing failure email landing in
 spam costs you the payment.
 
-**Respect the rate limit.** The default is **2 requests per second**. If you are sending a batch, use the batch
-endpoint or add backoff. A tight loop will start returning 429 and drop mail on the floor.
+**Respect the rate limit.** The documented default is **10 requests per second per team**, shared across every
+API key on the team. **Do not hard-code that number.** Read the `ratelimit-limit`, `ratelimit-remaining` and
+`ratelimit-reset` headers, and back off using `retry-after` on a 429. Limits change; headers do not.
+
+**And note the interaction with attachments**, because it catches people: the batch endpoint is the usual
+answer to volume, but **Resend does not support attachments on the batch endpoint**. An invoice email like
+this one has to go through the single-send endpoint, so pace it with the headers rather than batching it.
 
 **Send this one immediately.** A billing failure email is time-sensitive: the customer has a window to fix the
 card before the subscription pauses. Do not queue it behind a campaign.

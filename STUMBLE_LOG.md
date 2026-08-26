@@ -1,114 +1,122 @@
-# Stumble log
+# Setup notes: friction encountered, and what I would change
 
-Points where the setup left me guessing while building this. Kept as I went rather than reconstructed
-afterwards, which is the only way this stays honest.
+Kept while building rather than reconstructed afterwards. These are the points where I had to guess, and what
+I would change so the next person does not have to.
 
-**Not part of the tutorial.** This is the raw list, and it is the answer to "what would you change so the next
-person does not have to ask."
+**On confidence.** Each item says how sure I am. Where I have a hypothesis rather than a finding, it says so.
+A support note that overstates its own certainty is worse than one that admits what it does not know, and
+several of these are observations from a single environment rather than controlled results.
 
----
-
-## 1. The preview server stops on an interactive prompt
-
-`npm run email` does not start. It asks:
-
-> To run the preview server, the package "@react-email/ui" must be installed. Would you like to install it?
-
-**Why it matters.** It is a dead stop for a first-time user who does not know whether saying yes is safe, and
-it breaks entirely in any non-interactive context: CI, a container, a script, or an agent running the setup.
-
-**What I would change.** Either make it a stated peer dependency so npm surfaces it at install time, or have
-the quickstart include it in the install line. One extra package name in the docs removes the prompt.
-
-**Where it goes in the tutorial.** Prerequisites, as part of the install command, so nobody meets it.
+**Two of these are Next.js or React Email rather than Resend.** They are included because they sit in the path
+of anyone starting from `create-next-app` and following a Resend quickstart, but they are marked as such.
 
 ---
 
-## 2. `.env*` in the Next.js gitignore also excludes `.env.example`
+# Resend
 
-`create-next-app` writes `.env*`, which is correct for secrets and wrong for the example file that documents
-which variables the project needs. The result is that the one file a new contributor needs is silently not
-committed.
+## 1. The sending restriction is discovered as an error, not stated as a rule
 
-**Not Resend's issue**, it comes from the Next.js template. But it lands on anyone following a Resend
-quickstart that says "add your key to `.env.local`", because the natural next step is to commit an example and
-it quietly does not happen.
-
-**What I would change.** Mention the `!.env.example` negation in the quickstart, one line.
-
----
-
-## 3. Turbopack picks a lockfile from outside the project
-
-The build warns:
-
-> Next.js ignored package-lock.json in /Users/... because it is outside the current Git repository
-
-It walks up the filesystem looking for a lockfile and can settle on an unrelated one. Harmless here, but it
-makes the first build noisy, and a warning on a first run makes people think they did something wrong.
-
-**Fix:** pin `turbopack.root` in `next.config.ts`. Again a Next.js thing rather than a Resend thing, but it is
-in the path of anyone starting from `create-next-app`.
-
----
-
-## 4. The sending restriction is discovered as an error, not as a fact
+**Confidence: high.** Reproduced directly.
 
 New accounts can only send to the signup address until a domain is verified. This is sensible anti-abuse
-behaviour. **The problem is where you learn it.**
+behaviour. The friction is where you learn it: following the quickstart, the natural first action is to send
+to a real address, and you find out through a 403. The message is clear once you read it, but by then you are
+debugging rather than following a tutorial, and you do not yet know whether you broke something.
 
-Working from the quickstart, the natural first action is to send to a real address, and you find out via a
-403. The message is clear once you read it, but by then you are debugging rather than following a tutorial,
-and you do not yet know whether you broke something.
+**Suggested change.** State it in the quickstart prerequisites, before the first code block, with both paths
+spelled out: verify a domain, or send to yourself from `onboarding@resend.dev`. Two sentences.
 
-**What I would change.** State it in the quickstart prerequisites, before the first code block, with both
-paths spelled out: verify a domain, or send to yourself from `onboarding@resend.dev`. It costs two sentences
-and removes the most common first failure.
+**Priority: highest of these.** It is early in the funnel, it looks like a failure rather than a rule, and it
+is entirely preventable with documentation.
 
-**This is the one I would actually prioritise.** It is the first thing every new user hits, it looks like an
-error rather than a rule, and it is entirely preventable with documentation.
+## 2. Nothing in the send flow signals that a 200 is not the end
 
----
+**Confidence: high** on the observation, **medium** on how much confusion it causes in practice.
 
-## 5. Attachment `content` accepts several shapes and the difference is not obvious
+The API returns a message id on success and it is easy to read that as delivered. It means accepted. Delivery,
+bounces and complaints appear afterwards in the dashboard, and I did not find a pointer to the Emails tab
+anywhere in the send flow.
 
-A Buffer, a base64 string, or a remote `path` are all valid. Which one you want depends on where the file
-lives, and getting it wrong produces an unhelpful failure rather than a validation error naming the field.
+**Suggested change.** One line at the end of the quickstart: here is the id, here is where you look up what
+happened to it. Small addition, and it changes how someone debugs their first bounce.
 
-**What I would change.** A three-row table in the attachments doc: file is local, file is remote, file is
-generated in memory, with the right shape for each.
+## 3. Attachment `content` accepts several shapes and the difference is not obvious
 
----
+**Confidence: medium.** Based on reading the reference rather than on hitting a failure.
 
-## 6. Nothing tells you the 200 is not the end
+A Buffer, a base64 string, or a remote `path` are all valid, and which one you want depends on where the file
+lives.
 
-The API returns a message id on success, and it is easy to read that as delivered. It is not: it means
-accepted. Delivery, bounces and complaints appear afterwards in the dashboard.
+**Suggested change.** A three-row table: file is local, file is remote, file is generated in memory, with the
+right shape for each.
 
-**Nowhere in the send flow does the documentation point at the Emails tab**, so a developer can finish the
-quickstart with the wrong mental model and only discover it during their first incident.
+## 4. Verifying a domain reads as "deliverability, handled". It is not
 
-**What I would change.** One line at the end of the quickstart: here is the id, here is where you look up what
-happened to it. It is a small addition that changes how someone debugs their first bounce.
+**Confidence: high** on what happened. **Low to medium** on the cause, and the original version of this note
+overstated it.
 
----
+**What I observed.** Set up `send.jointhereef.com`, verified it, sent the first message to a Gmail address.
+**SPF pass, DKIM pass, DMARC pass, disposition none. Gmail filed it in Junk anyway.** I then changed the
+call-to-action and support address from `example.com` to the sending domain and re-sent. The next message
+landed in the inbox.
 
-## 7. Verifying a domain reads as "deliverability, done". It is not
+**What I can and cannot conclude.** That is consistent with link-domain mismatch contributing, and Resend's own
+deliverability guidance lists mismatched URLs as something filters weigh. **It does not establish cause.** It
+was one send before and one after, with no control for domain age, recipient engagement, message reputation,
+or the fact that both were test sends to my own address. A real diagnosis would need volume, a holdout, and
+more than one recipient domain.
 
-Set up `send.jointhereef.com`, verified it, sent the first message to a Gmail address. **SPF pass, DKIM pass,
-DMARC pass. Gmail put it in Junk anyway.**
-
-The authentication was not the problem and there was nothing left to fix in DNS. What actually caused it was
-reputation and content: a brand-new sending domain with no history, carrying a payment-failure email whose
-call-to-action pointed at a different domain than the sender. Textbook phishing shape, correctly signed.
-
-**Why this matters for the docs.** The domain setup flow ends at a green "verified" badge, and the natural
+**Why it is worth writing down regardless.** The domain flow ends on a green verified badge, and the natural
 reading is that deliverability is now handled. **A new sender's first real surprise is landing in spam with
-every check passing**, and at that point they have nothing left to check and no idea what to do next.
+every authentication check passing**, and at that point they have nothing left to check.
 
-**What I would change.** One paragraph at the end of domain verification: authentication is necessary and not
-sufficient, a new domain has no reputation yet, start with low volume to engaged recipients, and make sure
-links in the message point at the sending domain. Three sentences would prevent a whole class of ticket.
+**Suggested change.** A paragraph at the end of domain verification: authentication is necessary and not
+sufficient, a new domain has no reputation yet, start small with engaged recipients, and keep links on the
+sending domain.
 
-**Verified by fixing it:** repointing the CTA and the support address from `example.com` to the sending domain
-was the single change that mattered.
+---
+
+# Next.js and React Email, encountered on the way
+
+## 5. The React Email preview server stops on an interactive prompt
+
+**Confidence: high.** Reproduced.
+
+`npm run email` does not start. It asks whether to install `@react-email/ui`. That is a dead stop for a
+first-time user who does not know whether saying yes is safe, and it fails outright in any non-interactive
+context: CI, a container, or a script.
+
+**Suggested change.** Make it a stated peer dependency, or include it in the documented install line.
+
+## 6. `.env*` in the Next.js gitignore also excludes `.env.example`
+
+**Confidence: high.** Reproduced.
+
+`create-next-app` writes `.env*`, which is right for secrets and wrong for the example file documenting what
+the project needs. The one file a new contributor needs is silently not committed. A `!.env.example` negation
+fixes it.
+
+**Not a Resend issue**, but it lands on anyone following a Resend quickstart that says "add your key to
+`.env.local`".
+
+## 7. Turbopack can pick a lockfile from outside the project
+
+**Confidence: high.** Reproduced.
+
+The first build warns that Next.js ignored a `package-lock.json` outside the project. Harmless, but a warning
+on a first run makes people think they broke something. Pinning `turbopack.root` in `next.config.ts` clears it.
+
+---
+
+# One I got wrong myself
+
+Worth recording, since the point of this file is what actually happened.
+
+**I wrote that the default rate limit is 2 requests per second.** The documented default is **10 per second
+per team**. I had taken the number from an error string rather than from the reference, and did not check it.
+The right guidance is not a number at all: read `ratelimit-limit`, `ratelimit-remaining` and `ratelimit-reset`,
+and honour `retry-after`. Limits change, headers do not.
+
+**I also recommended the batch endpoint for volume in a tutorial built around an attachment**, without noticing
+that **Resend does not support attachments on the batch endpoint.** Two sections written separately, each
+sensible alone, contradicting each other on the page.

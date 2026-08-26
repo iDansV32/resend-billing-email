@@ -71,10 +71,9 @@ export default function BillingFailureEmail(
           <Text style={paragraph}>Hi {customerName},</Text>
 
           <Text style={paragraph}>
-            Your payment of <strong>{amountDue}</strong> for invoice{' '}
-            <strong>{invoiceNumber}</strong> was declined by your bank. The card
-            on file is the {cardBrand} ending {cardLast4}. A copy of the invoice
-            is attached to this email.
+            We could not process your payment of <strong>{amountDue}</strong>{' '}
+            for invoice <strong>{invoiceNumber}</strong>. The card on file is the{' '}
+            {cardBrand} ending {cardLast4}, and a copy of the invoice is attached.
           </Text>
 
           <Text style={paragraph}>
@@ -83,8 +82,9 @@ export default function BillingFailureEmail(
             {gracePeriodEnds}, the subscription will be paused.
           </Text>
 
-          {/* One action, stated as a link rather than a button.
-              Buttons in email are table hacks and some clients strip them. */}
+          {/* One action. React Email ships a <Button>, which is an anchor styled
+              to look like one; this is the same thing with the styles inline so
+              the whole template is visible in one file. */}
           <Section style={actionSection}>
             <Link href={updatePaymentUrl} style={action}>
               Update your payment method
@@ -122,8 +122,10 @@ export default function BillingFailureEmail(
 }
 
 /* Email clients only reliably support inline styles, so everything is a plain
-   object rather than a stylesheet. Web fonts do not load either, which is why
-   the stack below is all system fonts. */
+   object rather than a stylesheet. Web font support varies by client: React
+   Email ships a <Font> component for it, but a system stack renders the same
+   everywhere with no fallback to reason about, which is the right trade for a
+   billing notice. */
 
 const body = {
   backgroundColor: '#f4f4f5',
