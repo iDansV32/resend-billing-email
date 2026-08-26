@@ -85,13 +85,16 @@ telling customers about a four-hour cliff, not hearing about it from them the ne
 
 ### Internal notes
 
-**Facts:** ongoing 403s, volume implied high. Nothing else. A 403 means authenticated but not permitted, so
-the key is probably valid and something is refusing the action.
+**Facts:** ongoing 403s, volume implied high. Nothing else. **A 403 means the request was refused, and the
+status alone does not say why.** The exact error name and message determine the case, and the possibilities
+include the key itself being bad: Resend returns 403 for inactive and suspended keys, not just for
+permission problems.
 
-**Documented 403 causes, each with a different fix:** testing-mode restriction (sending to any address other
-than the account owner's before a domain is verified), sending from an unverified domain, a domain verified
-in a different region than the key, an API key scoped to sending-only used for something else, and a missing
-`User-Agent` on hand-rolled HTTP clients.
+**Documented 403 causes, each with a different fix:** an inactive or suspended API key, a key missing the
+required permission scope, the testing restriction (sending to any address other than the account owner's
+before a domain is verified), and sending from an unverified domain. Hand-rolled HTTP clients can also be
+refused at the edge before reaching the API. Nothing here can be told apart from the status code alone,
+which is why the error body is the first ask.
 
 **Process:** get the exact JSON error body, never the key. The body's `name` field distinguishes every cause
 above. Check the account's domain list and verification status in parallel, since that answers half of these
@@ -99,17 +102,18 @@ without waiting on the customer.
 
 ### Response
 
-> Happy to dig into this. A 403 from our API means the request was authenticated but not allowed, and there
-> are a few distinct causes, each with a different fix. So rather than have you try things, let us identify
-> which one this is.
+> Happy to dig into this. A 403 from our API means the request was refused, and there are several distinct
+> causes with different fixes, including some where the key itself is the problem. So rather than have you
+> try things, let us identify which one this is.
 >
 > Could you send me the full JSON error body from one of the failing requests? It looks like
 > `{ "statusCode": 403, "name": "...", "message": "..." }`. The `name` field tells us exactly which case we
 > are in. Please do not include your API key; I never need it.
 >
-> While you grab that, I am checking the domains on your account. The most common causes are sending to
-> addresses other than your own before a domain is verified, sending from a domain that is not verified yet,
-> or a domain and API key created in different regions. All three are quick fixes once confirmed.
+> While you grab that, I am checking your account from this side. The usual causes are an API key that is
+> inactive or suspended, a key without the permission the request needs, sending to addresses other than your
+> own before a domain is verified, or sending from a domain that is not verified yet. All of them are quick
+> fixes once we know which one it is.
 >
 > If the errors started suddenly after working fine, tell me roughly when. That timing matters.
 
@@ -129,8 +133,11 @@ refused; telling the customer removes the ticket.
 **Facts:** the error body itself states this account's limit is 2 requests per second. Trust the account's
 own headers over any remembered default; limits vary per account and change over time.
 
-**Key semantics:** a request rejected with 429 was not accepted and not sent. Retrying it cannot duplicate an
-email, so the fix is to queue and retry with backoff, honouring `retry-after`.
+**Key semantics:** a request rejected with 429 was not accepted and not sent, so retrying it cannot
+duplicate an email. The limit is also **team-wide across all API keys**, so a second service on the same
+account counts against the same budget, which is a classic source of "we did not change anything" rate-limit
+surprises. For anything retried automatically, an idempotency key per notification makes the retry safe even
+when the failure is ambiguous.
 
 **Process:** confirm the account's configured limit internally, check whether their volume justifies an
 increase, and find out what their sending pattern is (burst on an event, or steady).
@@ -147,14 +154,18 @@ increase, and find out what their sending pattern is (burst on an event, or stea
 > A rejected request was never accepted, so retrying it is safe and will not double-send.
 >
 > Structural: if your legitimate volume is simply above 2 per second, we can look at raising the limit on
-> your account. Tell me your typical and peak sends per minute and I will take it from there. Also worth
-> knowing: the `ratelimit-limit`, `ratelimit-remaining` and `ratelimit-reset` headers are on every response,
-> so your code can pace itself against them rather than hard-coding a number.
+> your account. Tell me your typical and peak sends per minute and I will take it from there. Two more things
+> worth knowing: the limit is shared across every API key on your team, so other services sending on the same
+> account count against it, and the `ratelimit-limit`, `ratelimit-remaining` and `ratelimit-reset` headers
+> are on every response, so your code can pace itself against them rather than hard-coding a number. If you
+> automate retries, attach an idempotency key to each notification so a retry can never double-send.
 
 ### Prevention
 
-Ship backoff-on-429 as default behaviour in the official SDKs, honouring `retry-after`. Most customers hit
-this once, implement the same queue, and should never have needed to.
+An opt-in retry helper in the official SDKs: bounded attempts, honours `retry-after`, requires an idempotency
+key. Opt-in rather than default, because silent automatic retries change delivery semantics under the
+customer's feet. Most customers hit this once and hand-build the same queue; the helper removes that work
+without changing behaviour for anyone who did not ask.
 
 ---
 
@@ -192,13 +203,15 @@ coherence, then list and engagement questions.
 > in Google Postmaster Tools.
 >
 > To be straight with you: nobody can guarantee inbox placement, and I will not pretend otherwise. What we
-> can do is eliminate every negative signal that is in your control, and that resolves the large majority of
-> these cases.
+> can do is eliminate every negative signal that is in your control, working from evidence rather than
+> guesswork, and that is where these investigations should start.
 
 ### Prevention
 
-Surface authentication-and-alignment status per message in the dashboard, next to delivery events. The data
-exists; showing it would let customers answer "is it authentication or reputation" without a ticket.
+Resend already ships per-message Deliverability Insights covering authentication, link domains, DMARC and
+related checks, so the gap is not the feature, it is the route to it. Link Insights directly from
+spam-related support flows and from the agent's answers to this class of ticket, and consider surfacing raw
+`Authentication-Results` there, so the customer starts from the evidence instead of a ticket.
 
 ---
 
@@ -218,8 +231,8 @@ but host DNS elsewhere, or vice versa). Then either the automatic flow or the ma
 
 > Sure. Two ways to do this, and the first is faster.
 >
-> Automatic: on your domain's page in Resend there is a "Sign in with Vercel" option that configures the
-> records for you. If your DNS is hosted at Vercel, that is the one-click path.
+> Automatic: on your domain's page in Resend there is an "Auto Configure" option for Vercel that sets the
+> records up for you. If your DNS is hosted at Vercel, that is the one-click path.
 >
 > Manual: in Vercel, go to your team's Domains section (not the project), select the domain, and open DNS
 > Records. Add a record with type TXT. In the Name field, enter only the part before your domain: if Resend
@@ -248,25 +261,30 @@ that provider, with the auto-append warning inline. This one question exists for
 Could also mean receiving Resend's own notifications. Answer the likely reading and leave a door open for
 the other.
 
-**Key concept to convey:** Resend receiving is not a hosted inbox. Inbound mail arrives at your application
-as an `email.received` webhook with the parsed message, and you decide what to do with it.
+**Key concepts to convey:** every account already has a managed receiving address at `<id>.resend.app`, and
+received messages are viewable in the dashboard's Receiving tab with no webhook needed, so the fastest test
+costs nothing. For applications, the `email.received` webhook carries the email ID and metadata, not the full
+body: the content comes from the Receiving API using that ID, and attachments come via temporary download
+URLs. Custom domains work by adding an MX record; if their root domain already handles normal mail, a
+receiving subdomain avoids touching the existing MX.
 
 ### Response
 
-> Yes, Resend can receive email for your domain, and it works differently from a normal inbox, which is worth
-> understanding before you set it up.
+> Yes, and the fastest way to try it costs nothing to set up. Your account already has a managed receiving
+> address: open Emails, select the Receiving tab, and copy your `<id>.resend.app` address. Anything sent to
+> any username at that address shows up right there in the dashboard.
 >
-> Instead of mail landing in a mailbox you log into, Resend accepts the message and delivers it to your
-> application as a webhook: an `email.received` event containing the parsed message. Your endpoint decides
-> what happens next, whether that is storing it, triggering something, or forwarding it.
+> If your application needs to react to incoming mail, subscribe a webhook to the `email.received` event. One
+> thing worth knowing up front: that event carries the email ID and metadata rather than the full message, so
+> your endpoint uses the ID to fetch the body and headers through the Receiving API, and attachments come as
+> temporary download URLs.
 >
-> Setup is three steps: verify your domain if you have not already, add the MX record shown in the receiving
-> section so inbound mail routes to Resend, and configure a webhook endpoint subscribed to `email.received`.
-> The dashboard walks you through each.
+> To receive at your own domain instead, you add the MX record shown in the receiving section. If your domain
+> already handles regular mail, point the MX at a subdomain like `inbound.yourdomain.com` rather than the
+> root, so your existing mailboxes are untouched.
 >
-> If what you actually want is a regular inbox where people read and reply to mail, Resend is not that, and
-> you would pair it with a mailbox provider instead. Tell me a little about what you are building and I can
-> confirm which shape fits.
+> If what you are after is a regular inbox where people read and reply, Resend is not that, and you would pair
+> it with a mailbox provider. Tell me a little about what you are building and I can confirm which shape fits.
 
 ### Prevention
 
@@ -282,9 +300,11 @@ answer it.
 
 ### Internal notes
 
-**Facts:** almost none. "Create an email" could mean send one via the API, design a template, or send a
-broadcast to an audience. The reading changes the answer entirely, and guessing wrong wastes their time and
-ours.
+**Facts:** almost none. "Create an email" could mean send one via the API, design a template, send a
+broadcast to an audience, or create a sender address like support@theirdomain.com. The last one has a
+pleasant answer: Resend does not require registering individual senders, so once the domain is verified they
+can send from any address on it. The reading changes the answer entirely, and guessing wrong wastes their
+time and ours.
 
 **Approach:** one clarifying question, but never a bare one. Give the fastest path for each likely reading so
 they can self-serve immediately, whichever they meant.
@@ -300,6 +320,9 @@ they can self-serve immediately, whichever they meant.
 > Designing how an email looks: have a look at templates, or React Email if your emails live in code.
 >
 > Sending one message to a list of subscribers: that is Broadcasts, created in the dashboard, no code needed.
+>
+> Setting up an address to send from, like support@yourdomain.com: no registration needed. Once your domain
+> is verified, you can send from any address on it.
 >
 > Tell me which of those you are after, and what you are building generally, and I will give you exact steps
 > rather than links.
@@ -319,19 +342,27 @@ needs the same disambiguation this reply does.
 **Severity:** High. Proposing incident classification pending scope check.
 **Subject:** ~4h sending failure window last night, account [ACCT-ID], thousands of failed auth emails. Scope unknown.
 
-**Summary.** Customer reports all sends failing for roughly four hours last night (window per customer:
-approx. 22:00 to 02:00 UTC, unconfirmed; details marked [ASSUMED] pending their logs). Volume in the
-thousands. The mail is login magic links, so every failure blocked an end user from signing in. Sending
-appears recovered now.
+**Summary.** Customer reports sending stopped for roughly four hours last night (window per customer:
+approx. 22:00 to 02:00 UTC, unconfirmed; details marked [ASSUMED] pending their logs). Thousands of reported
+missing auth emails. The mail is login magic links, so each missing message blocked an end user from signing
+in. Sending appears recovered now.
+
+**The bug, as currently evidenced:**
+
+[ASSUMED FOR EXERCISE] During the affected window, sample `POST /emails` requests returned 200 with email
+IDs, but those messages emitted no `email.sent` or `email.failed` events and sat with no terminal state for
+approximately four hours. The same payload succeeded before and after the window.
+
+- **Expected:** an accepted request enters the sending pipeline and emits its lifecycle events.
+- **Actual:** requests were accepted and then stranded between acceptance and dispatch, with no events and no
+  error surfaced to the customer.
+- **Bug:** accepted messages stalled before dispatch. Note the distinction: a bounce or recipient-side delay
+  after dispatch would not be a platform bug. Accepted-but-never-dispatched, with no failure event, is.
 
 **What support has verified so far:**
 - Account sending graph shows [ASSUMED: a drop to zero inside the reported window, normal volume either side]
-- Status page shows no incident posted for the window
+- Status page check for the window: [PENDING], the report says "last night" with no date
 - Sample email IDs from the customer: [PENDING]
-
-**The question that decides ownership:** were requests rejected at the API, or accepted and failed
-downstream? Customer logs are pending. If accepted-then-failed, this is ours end to end. If rejected, I need
-the response codes to say whose it is. I did not want to hold the escalation on that answer given the scale.
 
 **Reproduction and verification path:** pull API request logs for [ACCT-ID] for the window, split by response
 status; for a sample of accepted IDs, check event timelines for missing delivery events; then run the same
