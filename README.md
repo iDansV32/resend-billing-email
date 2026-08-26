@@ -3,8 +3,8 @@
 A complete, working example of the email you send when a customer's card is declined, built with Next.js,
 [React Email](https://react.email) and [Resend](https://resend.com). Includes the invoice as an attachment.
 
-This README takes you from an empty folder to a delivered email. Every code block is complete and can be
-pasted as it is.
+This README takes you from an empty folder to a sent email, and shows you where to confirm delivery. Most
+code blocks paste as they are; the two that are abridged say so and link to the complete file in this repo.
 
 **What you end up with:** a page with one input, and an API route that renders a React email and sends it
 with the invoice attached.
@@ -112,7 +112,7 @@ that documents what the project needs. Add a negation so the example is committe
 React Email lets you write an email as a React component instead of hand-writing nested HTML tables. It
 renders to the HTML that email clients actually understand.
 
-Create `emails/billing-failure.tsx`:
+Create `emails/billing-failure.tsx`. **Abridged here**; the complete file is [`emails/billing-failure.tsx`](emails/billing-failure.tsx):
 
 ```tsx
 import { Body, Container, Head, Heading, Html, Preview, Text } from '@react-email/components';
@@ -272,7 +272,8 @@ first thing you will want when a customer says they never received it.
 
 ## 8. Attach the invoice
 
-A billing email that says "your invoice is attached" should attach the invoice.
+A billing email that says "your invoice is attached" should attach the invoice. **The snippet below is a
+patch, not the whole route**; the complete version is [`app/api/send/route.ts`](app/api/send/route.ts).
 
 Create an `invoices/` folder and put a PDF in it named `INV-2026-0814.pdf`. Any PDF will do while you are
 following along; this repo includes a generated one. **If the file is not there, `readFile` throws `ENOENT`
@@ -331,8 +332,10 @@ own domain. Resend's verification sets up **SPF and DKIM**; **DMARC is optional 
   when neither aligned mechanism passes.
 
 **The word that matters is alignment, and it is where most explanations go wrong.** DMARC passes if *either*
-aligned SPF *or* aligned DKIM passes. It only fails when both fail. That is not academic: this project sends
-from a subdomain with a DKIM record and no SPF record of its own, and DMARC passes on DKIM alignment alone.
+aligned SPF *or* aligned DKIM passes. It only fails when both fail to produce an aligned pass. And SPF is
+evaluated against the envelope sender, not the visible From: Resend provisions its own Return-Path subdomain,
+so SPF can pass and align even though you never added an SPF record to the domain you see in From. Read the
+`Authentication-Results` header on a delivered message rather than reasoning from your DNS zone.
 
 **Separate transactional mail from marketing.** Use a different subdomain, for example `billing.yourdomain.com`
 for this and `news.yourdomain.com` for campaigns. Reputation is tracked per domain. **If a marketing send goes

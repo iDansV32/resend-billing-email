@@ -117,6 +117,12 @@ per team**. I had taken the number from an error string rather than from the ref
 The right guidance is not a number at all: read `ratelimit-limit`, `ratelimit-remaining` and `ratelimit-reset`,
 and honour `retry-after`. Limits change, headers do not.
 
+**I explained DMARC with the boolean backwards, then fixed it with an example that was also wrong.** The
+first version said DMARC applies "when SPF or DKIM fail". The correction claimed this project passes DMARC on
+DKIM alone because the From subdomain has no SPF record. The delivered message's own headers show SPF passed,
+on the Return-Path domain Resend provisions, and aligned. The general lesson survived both mistakes: read the
+`Authentication-Results` header instead of reasoning from your DNS zone.
+
 **I also recommended the batch endpoint for volume in a tutorial built around an attachment**, without noticing
 that **Resend does not support attachments on the batch endpoint.** Two sections written separately, each
 sensible alone, contradicting each other on the page.

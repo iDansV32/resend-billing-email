@@ -67,6 +67,9 @@ export async function POST(request: Request) {
       subject: 'Your payment did not go through (invoice INV-2026-0814)',
       react: BillingFailureEmail({
         updatePaymentUrl: 'https://jointhereef.com/billing',
+        // Same mailbox replyTo points at, so the footer and the actual reply
+        // routing cannot drift apart.
+        supportEmail: process.env.RESEND_REPLY_TO ?? from,
         // Optional. Set REPO_URL to append a "built as a worked example" line.
         repoUrl: process.env.REPO_URL,
       }),

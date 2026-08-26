@@ -104,7 +104,7 @@ export default function BillingFailureEmail(
             <Link href={`mailto:${supportEmail}`} style={footerLink}>
               {supportEmail}
             </Link>
-            . A person reads it.
+            .
           </Text>
 
           {repoUrl && (
