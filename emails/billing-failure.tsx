@@ -21,6 +21,8 @@ export interface BillingFailureEmailProps {
   gracePeriodEnds: string;
   updatePaymentUrl: string;
   supportEmail: string;
+  /** Only set for the take-home submission. Omitted in the real example. */
+  repoUrl?: string;
 }
 
 // Sensible defaults so the React Email preview server renders something real.
@@ -32,8 +34,8 @@ export const defaultProps: BillingFailureEmailProps = {
   invoiceNumber: 'INV-2026-0814',
   nextRetryDate: 'Thursday 27 August',
   gracePeriodEnds: '8 September',
-  updatePaymentUrl: 'https://example.com/billing',
-  supportEmail: 'support@example.com',
+  updatePaymentUrl: 'https://jointhereef.com/billing',
+  supportEmail: 'support@jointhereef.com',
 };
 
 export default function BillingFailureEmail(
@@ -49,6 +51,7 @@ export default function BillingFailureEmail(
     gracePeriodEnds,
     updatePaymentUrl,
     supportEmail,
+    repoUrl,
   } = { ...defaultProps, ...props };
 
   return (
@@ -103,6 +106,15 @@ export default function BillingFailureEmail(
             </Link>
             . A person reads it.
           </Text>
+
+          {repoUrl && (
+            <Text style={footer}>
+              Built as a worked example.{' '}
+              <Link href={repoUrl} style={footerLink}>
+                {repoUrl.replace('https://', '')}
+              </Link>
+            </Text>
+          )}
         </Container>
       </Body>
     </Html>

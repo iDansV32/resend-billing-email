@@ -43,7 +43,11 @@ export async function POST(request: Request) {
     from,
     to,
     subject: 'Your payment did not go through (invoice INV-2026-0814)',
-    react: BillingFailureEmail({ updatePaymentUrl: 'https://example.com/billing' }),
+    react: BillingFailureEmail({
+      updatePaymentUrl: 'https://jointhereef.com/billing',
+      // Optional. Set REPO_URL to append a "built as a worked example" line.
+      repoUrl: process.env.REPO_URL,
+    }),
     attachments: [
       {
         filename: 'INV-2026-0814.pdf',

@@ -90,3 +90,25 @@ quickstart with the wrong mental model and only discover it during their first i
 
 **What I would change.** One line at the end of the quickstart: here is the id, here is where you look up what
 happened to it. It is a small addition that changes how someone debugs their first bounce.
+
+---
+
+## 7. Verifying a domain reads as "deliverability, done". It is not
+
+Set up `send.jointhereef.com`, verified it, sent the first message to a Gmail address. **SPF pass, DKIM pass,
+DMARC pass. Gmail put it in Junk anyway.**
+
+The authentication was not the problem and there was nothing left to fix in DNS. What actually caused it was
+reputation and content: a brand-new sending domain with no history, carrying a payment-failure email whose
+call-to-action pointed at a different domain than the sender. Textbook phishing shape, correctly signed.
+
+**Why this matters for the docs.** The domain setup flow ends at a green "verified" badge, and the natural
+reading is that deliverability is now handled. **A new sender's first real surprise is landing in spam with
+every check passing**, and at that point they have nothing left to check and no idea what to do next.
+
+**What I would change.** One paragraph at the end of domain verification: authentication is necessary and not
+sufficient, a new domain has no reputation yet, start with low volume to engaged recipients, and make sure
+links in the message point at the sending domain. Three sentences would prevent a whole class of ticket.
+
+**Verified by fixing it:** repointing the CTA and the support address from `example.com` to the sending domain
+was the single change that mattered.
