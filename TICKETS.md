@@ -1,13 +1,13 @@
-# Customer tickets: triage, process, responses, escalation
+Resend Take-Home: Customer Tickets - Ivan Dans
 
-How I worked: internal notes first, separating what the ticket states from what I am inferring and what I
+How I approached this: I wrote the internal notes first, separating what the ticket states from what I am inferring and what I
 still need. The customer response is written from those notes. Every ticket ends with one upstream prevention
 idea, because a ticket reaching a human is a signal that something in the try block needs to change.
 
 Labels use Resend's own taxonomy (Reliability, Usability, Functional, Deliverability, Abuse, Success
 Outreach) plus the product area.
 
-## Summary table
+Priority order:
 
 | Priority | Ticket | Label | Why this position |
 |---:|---|---|---|
@@ -24,11 +24,11 @@ allows, they get cleared quickly rather than aging behind the investigations.
 
 ---
 
-## RES-7921. "My emails suddenly stopped sending last night for 4 hours and thousands of magic links didn't send. What happened? This is unacceptable."
+## Ticket RES-7921. "My emails suddenly stopped sending last night for 4 hours and thousands of magic links didn't send. What happened? This is unacceptable."
 
 **Label:** Reliability / Sending. **Priority: 1.**
 
-### Internal notes
+### Note explaining my thinking:
 
 **Facts from the ticket:** a roughly four-hour window last night, high volume, magic links, so time-sensitive
 authentication mail whose failure blocks their end users from logging in. The window appears to be over.
@@ -53,7 +53,7 @@ deploy, queue, credentials). These are three different incidents with three diff
 **Judgment call:** this is ranked above the active 403s because of end-user scale, recurrence risk, and
 because its diagnosis may explain #2. Both are checked in the same first fifteen minutes.
 
-### Response
+### Draft response to the customer:
 
 > Hi, I understand how serious this is. Four hours of failed magic links means your users could not log in,
 > and you need to know what happened and whether it can happen again. I am treating this as a potential
@@ -72,18 +72,18 @@ because its diagnosis may explain #2. Both are checked in the same first fifteen
 >
 > I will update you within the hour with what I have found, even if the answer is not complete yet.
 
-### Prevention
+### How I would stop this coming back:
 
 An account-level alert when a customer's send volume drops to zero against their own baseline. We should be
 telling customers about a four-hour cliff, not hearing about it from them the next morning.
 
 ---
 
-## RES-1348. "I'm seeing a ton of 403 errors on my account. How do I fix that?"
+## Ticket RES-1348. "I'm seeing a ton of 403 errors on my account. How do I fix that?"
 
 **Label:** Reliability / API authorization. **Priority: 2.**
 
-### Internal notes
+### Note explaining my thinking:
 
 **Facts:** ongoing 403s, volume implied high. Nothing else. **A 403 means the request was refused, and the
 status alone does not say why.** The exact error name and message determine the case, and the possibilities
@@ -100,7 +100,7 @@ which is why the error body is the first ask.
 above. Check the account's domain list and verification status in parallel, since that answers half of these
 without waiting on the customer.
 
-### Response
+### Draft response to the customer:
 
 > Happy to dig into this. A 403 from our API means the request was refused, and there are several distinct
 > causes with different fixes, including some where the key itself is the problem. So rather than have you
@@ -117,18 +117,18 @@ without waiting on the customer.
 >
 > If the errors started suddenly after working fine, tell me roughly when. That timing matters.
 
-### Prevention
+### How I would stop this coming back:
 
 Every 403 body should carry a `docs` URL naming its specific cause and fix. The error already knows why it
 refused; telling the customer removes the ticket.
 
 ---
 
-## RES-3485. Rate limit error: "Too many requests. You can only make 2 requests per second."
+## Ticket RES-3485. Rate limit error: "Too many requests. You can only make 2 requests per second."
 
 **Label:** Usability / Rate limits. **Priority: 3.**
 
-### Internal notes
+### Note explaining my thinking:
 
 **Facts:** the error body itself states this account's limit is 2 requests per second. Trust the account's
 own headers over any remembered default; limits vary per account and change over time.
@@ -142,7 +142,7 @@ when the failure is ambiguous.
 **Process:** confirm the account's configured limit internally, check whether their volume justifies an
 increase, and find out what their sending pattern is (burst on an event, or steady).
 
-### Response
+### Draft response to the customer:
 
 > You are hitting the rate limit on your account, which is 2 requests per second, and the requests that get
 > the 429 are not being sent, which is why those users never receive the notification.
@@ -160,7 +160,7 @@ increase, and find out what their sending pattern is (burst on an event, or stea
 > are on every response, so your code can pace itself against them rather than hard-coding a number. If you
 > automate retries, attach an idempotency key to each notification so a retry can never double-send.
 
-### Prevention
+### How I would stop this coming back:
 
 An opt-in retry helper in the official SDKs: bounded attempts, honours `retry-after`, requires an idempotency
 key. Opt-in rather than default, because silent automatic retries change delivery semantics under the
@@ -169,11 +169,11 @@ without changing behaviour for anyone who did not ask.
 
 ---
 
-## RES-2196. "My emails are going to the spam folder at Gmail. What can I do to stop this?"
+## Ticket RES-2196. "My emails are going to the spam folder at Gmail. What can I do to stop this?"
 
 **Label:** Deliverability / Gmail. **Priority: 4.**
 
-### Internal notes
+### Note explaining my thinking:
 
 **Facts:** spam placement at Gmail specifically. Nothing about volume, mail type, domain age, or
 authentication state.
@@ -187,7 +187,7 @@ nobody can honestly promise inbox placement. Diagnose from evidence: a Resend em
 available, then work the checklist in order: authentication first because it is binary, then link and domain
 coherence, then list and engagement questions.
 
-### Response
+### Draft response to the customer:
 
 > Spam placement is diagnosable, but I want to work from evidence rather than a generic checklist, because
 > the fix depends on which signal Gmail is reacting to.
@@ -206,7 +206,7 @@ coherence, then list and engagement questions.
 > can do is eliminate every negative signal that is in your control, working from evidence rather than
 > guesswork, and that is where these investigations should start.
 
-### Prevention
+### How I would stop this coming back:
 
 Resend already ships per-message Deliverability Insights covering authentication, link domains, DMARC and
 related checks, so the gap is not the feature, it is the route to it. Link Insights directly from
@@ -215,11 +215,11 @@ spam-related support flows and from the agent's answers to this class of ticket,
 
 ---
 
-## RES-1927. "I'm not sure how to add the TXT record at Vercel. Can you tell me how?"
+## Ticket RES-1927. "I'm not sure how to add the TXT record at Vercel. Can you tell me how?"
 
 **Label:** Usability / Domains. **Priority: 5.**
 
-### Internal notes
+### Note explaining my thinking:
 
 **Facts:** mid domain-verification, DNS hosted at Vercel. The usual failure here is pasting the full
 hostname into a field that auto-appends the domain, creating `send.example.com.example.com`.
@@ -227,7 +227,7 @@ hostname into a field that auto-appends the domain, creating `send.example.com.e
 **Process:** confirm Vercel is actually authoritative for the domain (customers sometimes bought at Vercel
 but host DNS elsewhere, or vice versa). Then either the automatic flow or the manual steps.
 
-### Response
+### Draft response to the customer:
 
 > Sure. Two ways to do this, and the first is faster.
 >
@@ -244,18 +244,18 @@ but host DNS elsewhere, or vice versa). Then either the automatic flow or the ma
 > If it does not verify within half an hour, send me a screenshot of the record as saved in Vercel and I will
 > spot the difference.
 
-### Prevention
+### How I would stop this coming back:
 
 Provider-aware instructions on the domain page: detect the nameservers and show the exact field values for
 that provider, with the auto-append warning inline. This one question exists for every DNS host.
 
 ---
 
-## RES-5842. "I need to be able to receive emails from Resend. How do I do that?"
+## Ticket RES-5842. "I need to be able to receive emails from Resend. How do I do that?"
 
 **Label:** Usability / Receiving. **Priority: 6.**
 
-### Internal notes
+### Note explaining my thinking:
 
 **Facts:** ambiguous phrasing. Most likely they want to receive inbound mail at their domain through Resend.
 Could also mean receiving Resend's own notifications. Answer the likely reading and leave a door open for
@@ -268,7 +268,7 @@ body: the content comes from the Receiving API using that ID, and attachments co
 URLs. Custom domains work by adding an MX record; if their root domain already handles normal mail, a
 receiving subdomain avoids touching the existing MX.
 
-### Response
+### Draft response to the customer:
 
 > Yes, and the fastest way to try it costs nothing to set up. Your account already has a managed receiving
 > address: open Emails, select the Receiving tab, and copy your `<id>.resend.app` address. Anything sent to
@@ -286,7 +286,7 @@ receiving subdomain avoids touching the existing MX.
 > If what you are after is a regular inbox where people read and reply, Resend is not that, and you would pair
 > it with a mailbox provider. Tell me a little about what you are building and I can confirm which shape fits.
 
-### Prevention
+### How I would stop this coming back:
 
 The phrase "receive emails" carries both meanings, and this ticket will recur. A short "is Resend an inbox?"
 entry in the receiving docs, stating plainly what it is and is not, would let the docs and the support agent
@@ -294,11 +294,11 @@ answer it.
 
 ---
 
-## RES-2984. "How do i create an email?"
+## Ticket RES-2984. "How do i create an email?"
 
 **Label:** Usability / Sending. **Priority: 7.**
 
-### Internal notes
+### Note explaining my thinking:
 
 **Facts:** almost none. "Create an email" could mean send one via the API, design a template, send a
 broadcast to an audience, or create a sender address like support@theirdomain.com. The last one has a
@@ -309,7 +309,7 @@ time and ours.
 **Approach:** one clarifying question, but never a bare one. Give the fastest path for each likely reading so
 they can self-serve immediately, whichever they meant.
 
-### Response
+### Draft response to the customer:
 
 > Happy to help. Quick question so I point you at the right thing, because "create an email" can mean a few
 > things here. Which is closest?
@@ -327,7 +327,7 @@ they can self-serve immediately, whichever they meant.
 > Tell me which of those you are after, and what you are building generally, and I will give you exact steps
 > rather than links.
 
-### Prevention
+### How I would stop this coming back:
 
 This is the clearest possible candidate for agent-first resolution: a well-scoped clarifying flow answers it
 without a human. If tickets this generic are reaching people, the agent's intake or the docs entry point
@@ -335,7 +335,7 @@ needs the same disambiguation this reply does.
 
 ---
 
-# Escalation: RES-7921 to engineering
+Escalation message to the engineering team, for RES-7921
 
 **To:** engineering on-call
 **From:** support (Ivan)
