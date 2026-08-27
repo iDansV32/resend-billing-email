@@ -240,9 +240,10 @@ that a message will land in the inbox.
 
 What I need in order to make progress is one email ID from a message that went to spam, and the raw headers
 of that message as it was received. The authentication results in those headers tell me whether authentication
-is failing, which would be the first thing to fix. If it's passing, that rules authentication out and moves
-the investigation to content, domain reputation, list quality and engagement, which are slower to work
-through, so it's worth establishing early which side of that line we're on.
+is failing, which would be the first thing to fix. If SPF, DKIM and DMARC all passed for that message, that
+rules out a straightforward authentication failure for that send, and I'd then investigate content, domain
+reputation, list quality and engagement, which are slower to work through, so it's worth establishing early
+which side of that line we're on.
 
 I'd also check their domain verification and DMARC status from my side while I wait.
 
