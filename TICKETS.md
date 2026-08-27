@@ -199,7 +199,8 @@ looks like, since a burst around an event needs a different answer from steady t
 > another service sending on the same account, it counts against the same budget. And every response includes
 > `ratelimit-limit`, `ratelimit-remaining` and `ratelimit-reset` headers, so your code can pace itself using
 > those rather than relying on a fixed number. If you do automate the retries, it's worth attaching an
-> idempotency key to each notification, so that a retry can never result in the same email going out twice.
+> `Idempotency-Key` header to each notification. We treat the same key as the same email for 24 hours, so a
+> retry can't result in the same message going out twice.
 >
 > Best,
 > Ivan
@@ -334,9 +335,9 @@ likely reading and leave the door open for the other one.
 The thing they most need to understand before building anything is that receiving in Resend isn't a normal
 inbox. Every account already has an address at `<id>.resend.app`, and messages sent there show up in the
 Receiving tab in the dashboard without any setup at all, which makes it very easy to try. For an application,
-the `email.received` webhook carries the email ID and some information about the message rather than the full
-content, so the application uses that ID to fetch the body and headers from the Receiving API, and gets
-attachments through temporary download links.
+the `email.received` webhook carries the email ID and the message metadata, but it doesn't carry attachment
+contents, only their metadata. The application uses that ID to fetch what it needs from the Receiving API,
+and attachment download links are only valid for an hour, which matters for how they build it.
 
 If they want to receive at their own domain, that's an MX record. If their domain already handles normal
 email, I'd suggest pointing the MX at a subdomain instead, so their existing mail isn't affected.
@@ -352,9 +353,11 @@ email, I'd suggest pointing the MX at a subdomain instead, so their existing mai
 > username at that address will appear right there in the dashboard.
 >
 > If you want your application to react to incoming mail, you can subscribe a webhook to the `email.received`
-> event. One thing worth knowing before you build it: that event contains the email ID and information about
-> the message, rather than the full contents. Your endpoint uses that ID to fetch the body and headers from
-> the Receiving API, and attachments come through as temporary download links.
+> event. One thing worth knowing before you build it: that event tells you a message arrived and carries its
+> metadata, but it doesn't include the contents of any attachments. Your endpoint uses the email ID to fetch
+> what it needs from the Receiving API. Attachments come through a download URL that's valid for one hour, so
+> if you need to keep a file, it's worth downloading it when the webhook arrives and storing it your side
+> rather than saving the link and using it later.
 >
 > To receive at your own domain instead, you add the MX record shown in the receiving section. If your domain
 > is already handling normal email, I'd suggest pointing the MX at a subdomain such as
@@ -443,16 +446,19 @@ recovered.
 The bug, based on what we have so far:
 
 [ASSUMED FOR EXERCISE] During the affected window, a sample of `POST /emails` requests returned a 200 along
-with email IDs, but those messages never produced an `email.sent` or `email.failed` event and sat with no
-final state for around four hours. The same request worked before the window and after it.
+with email IDs, and those messages recorded an `email.sent` event, which only tells us the API request was
+accepted. They then recorded nothing further. No `email.delivered`, no `email.bounced` and no `email.failed`,
+for around four hours. The same request worked before the window and after it.
 
-- Expected: a request we accept enters the sending pipeline and produces its normal events.
-- Actual: we accepted the requests and then they stopped there, with no events and no error shown to the
-  customer.
-- The bug: accepted messages that never got sent and never recorded a failure. It's worth being clear about
-  the distinction here. An email that bounces, or that's delayed by the receiving server, isn't a platform
-  bug, because that happens after we've sent it. Something we accepted, never sent, and never marked as
-  failed is.
+- Expected: a message we accept moves through the pipeline and reaches a final state, which is delivered,
+  bounced or failed.
+- Actual: the messages were accepted and stopped there, with no final state recorded and no error shown to
+  the customer.
+- The bug: accepted messages that never reached any final state at all. It's worth being clear about the
+  distinction, because `email.sent` is easy to misread as success. It means we took the request, not that we
+  delivered anything. An email that bounces, or that's delayed by the receiving server, isn't a platform bug,
+  because that happens after we've handed it off. Something we accepted and then never resolved either way
+  is.
 
 What I've been able to check so far:
 
