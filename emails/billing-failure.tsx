@@ -92,9 +92,9 @@ export default function BillingFailureEmail(
           </Section>
 
           <Text style={paragraph}>
-            Most declines are the card expiring, a new billing address, or the
-            bank flagging a recurring charge. Updating the card usually clears
-            it in a couple of minutes.
+            Declines like this are often the card expiring, a new billing
+            address, or the bank flagging a recurring charge. Updating the card
+            is usually all it takes.
           </Text>
 
           <Hr style={hr} />

@@ -54,10 +54,12 @@ What I'd do, in order:
    events on a few of them. If it returned errors, I'd ask the customer for the status codes from their logs.
 4. Check whether any other accounts show the same window. If they do, this isn't really a support ticket any
    more, it's an incident, and it needs a status page entry.
-5. I wouldn't tell them to simply resend the failed batch. Magic links expire, so sending that batch again
-   would deliver thousands of dead links to thousands of already frustrated users and create a second
-   problem. If they do need to resend, the links have to be generated again first, and that's something they
-   would have to do in their own application.
+5. I wouldn't tell them to simply resend the failed batch. Magic links normally carry an expiry, though the
+   ticket doesn't tell me what theirs is, so I'd want that confirmed before anybody resends anything. If
+   those links have already lapsed, sending the batch again would deliver thousands of dead links to
+   thousands of already frustrated users and create a second problem on top of the first. If a resend is
+   needed, the links would have to be generated again first, and that's something they'd do in their own
+   application.
 
 One thing I want to be transparent about: I've put this above the ongoing 403 errors and it's a close call.
 This one is bigger and affects more people, but it's already over, whereas the 403s are still failing while
@@ -82,9 +84,10 @@ explain the other one.
 > time window in UTC. The second is two or three email IDs or API responses from your logs during the
 > failure.
 >
-> One thing I'd ask in the meantime: please don't resend the failed batch as it is. The magic links from last
-> night will have expired by now, so resending would deliver thousands of links that no longer work. If a
-> resend is needed, the links would need to be generated again first.
+> One thing I'd ask in the meantime: please don't resend last night's batch until we've confirmed how long
+> your magic links stay valid. If they've already lapsed, resending would deliver thousands of links that no
+> longer work, which would make things worse rather than better. If they have lapsed, or might lapse before
+> they arrive, the links would need to be generated again first.
 >
 > I'll come back to you within the hour with whatever I've found, even if I don't have the full answer yet.
 >
@@ -107,14 +110,19 @@ hearing about it from them the following morning.
 
 The ticket tells me there are a lot of 403 errors and nothing else. A 403 means the request was refused, but
 the status code on its own doesn't tell me why, and I don't want to assume the API key is fine just because
-the request got that far. Resend returns a 403 for inactive and suspended keys as well as for permission
-problems.
+the request got that far. Resend returns a 403 for inactive and suspended keys as well as for scope and
+domain problems.
 
-The documented causes each have a different fix. It could be an API key that's inactive or suspended, a key
-that's missing the permission the request needs, the testing restriction that applies before a domain is
-verified, or sending from a domain that hasn't been verified yet. A request coming from a hand-built HTTP
-client can also be refused before it reaches the API at all. None of those can be told apart from the number
-403 on its own, which is why the first thing I need is the error body rather than more description.
+The documented causes each have a different fix. It could be an API key that's inactive or suspended, an
+OAuth access token missing the scopes the request needs, the testing restriction that applies before a domain
+is verified, or sending from a domain that hasn't been verified yet. A direct HTTP request with no
+`User-Agent` header can also be refused before it reaches the API at all. None of those can be told apart
+from the number 403 on its own, which is why the first thing I need is the error body rather than more
+description.
+
+One thing the status code does rule out. A key that's restricted to sending, used on an endpoint that isn't
+sending, comes back as a 401 rather than a 403. So the fact that they're seeing 403s tells me it isn't that
+case, which is worth knowing before I start asking them to check things.
 
 While I wait for that, I'd check the domains on their account and their verification status from my side,
 since that answers about half of these without needing anything from the customer.
@@ -135,10 +143,10 @@ since that answers about half of these without needing anything from the custome
 > The `name` field tells us exactly which case we're dealing with. Please don't include your API key when you
 > send it over, as I never need it in order to help you.
 >
-> While you're getting that, I'm checking your account from my side. The most common causes are an API key
-> that's inactive or suspended, a key that doesn't have the permission the request needs, sending to
-> addresses other than your own before a domain is verified, or sending from a domain that hasn't been
-> verified yet. All of them are quick to fix once we know which one it is.
+> While you're getting that, I'm checking your account from my side. The possible causes are an API key
+> that's inactive or suspended, an OAuth access token missing the scopes it needs, sending to addresses
+> other than your own before a domain is verified, or sending from a domain that hasn't been verified yet.
+> All of them are quick to fix once we know which one it is.
 >
 > One more thing that would help: if these errors started suddenly after everything had been working, let me
 > know roughly when. That timing usually points straight at the cause.
@@ -332,12 +340,13 @@ The wording is ambiguous. The most likely reading is that they want to receive i
 domain through Resend, but it could also mean they want to receive notifications from us. I'll answer the
 likely reading and leave the door open for the other one.
 
-The thing they most need to understand before building anything is that receiving in Resend isn't a normal
-inbox. Every account already has an address at `<id>.resend.app`, and messages sent there show up in the
+The thing they most need to understand before building anything is that receiving in Resend isn't a hosted
+mailbox, even though it can show them messages and reply to them. Every account already has an address at `<id>.resend.app`, and messages sent there show up in the
 Receiving tab in the dashboard without any setup at all, which makes it very easy to try. For an application,
-the `email.received` webhook carries the email ID and the message metadata, but it doesn't carry attachment
-contents, only their metadata. The application uses that ID to fetch what it needs from the Receiving API,
-and attachment download links are only valid for an hour, which matters for how they build it.
+the `email.received` webhook carries the email ID and the message metadata only. It doesn't carry the body,
+the headers or the attachments. The application uses that ID to fetch the body and headers from the Receiving
+API and the files from the Attachments API, and those attachment download links are only valid for an hour,
+which matters for how they build it.
 
 If they want to receive at their own domain, that's an MX record. If their domain already handles normal
 email, I'd suggest pointing the MX at a subdomain instead, so their existing mail isn't affected.
@@ -353,19 +362,22 @@ email, I'd suggest pointing the MX at a subdomain instead, so their existing mai
 > username at that address will appear right there in the dashboard.
 >
 > If you want your application to react to incoming mail, you can subscribe a webhook to the `email.received`
-> event. One thing worth knowing before you build it: that event tells you a message arrived and carries its
-> metadata, but it doesn't include the contents of any attachments. Your endpoint uses the email ID to fetch
-> what it needs from the Receiving API. Attachments come through a download URL that's valid for one hour, so
-> if you need to keep a file, it's worth downloading it when the webhook arrives and storing it your side
-> rather than saving the link and using it later.
+> event. One thing worth knowing before you build it: that event carries the message metadata only, so the
+> email ID, sender, recipients, subject and the names of any attachments. It doesn't carry the body, the
+> headers or the attachment contents. Your endpoint uses the email ID to fetch the body and headers from the
+> Receiving API, and any files from the Attachments API. Those attachment download URLs are valid for one
+> hour, so if you need to keep a file, download it when the webhook arrives and store it your side rather
+> than saving the link and using it later.
 >
 > To receive at your own domain instead, you add the MX record shown in the receiving section. If your domain
 > is already handling normal email, I'd suggest pointing the MX at a subdomain such as
 > `inbound.yourdomain.com` rather than at the root, so that your existing mailboxes aren't affected.
 >
-> One last thing, in case it's relevant: if what you're looking for is a normal inbox where people read and
-> reply to messages, Resend isn't that, and you'd want to pair it with a mailbox provider. If you tell me a
-> bit about what you're building, I can confirm which of these fits.
+> One last thing, in case it's relevant. Resend does show received messages in the dashboard and it does
+> support replying in the same thread, so this isn't one-way. What it isn't is a hosted mailbox with folders
+> and a compose window for someone to work in day to day, so if that's what you need you'd want to pair it
+> with a mailbox provider. If you tell me a bit about what you're building, I can confirm which of these
+> fits.
 >
 > Best,
 > Ivan
@@ -447,14 +459,14 @@ The bug, based on what we have so far:
 
 [ASSUMED FOR EXERCISE] During the affected window, a sample of `POST /emails` requests returned a 200 along
 with email IDs, and those messages recorded an `email.sent` event, which only tells us the API request was
-accepted. They then recorded nothing further. No `email.delivered`, no `email.bounced` and no `email.failed`,
-for around four hours. The same request worked before the window and after it.
+accepted. They then recorded nothing further. No `email.delivered`, no `email.bounced`, no `email.failed` and
+no `email.suppressed`, for around four hours. The same request worked before the window and after it.
 
-- Expected: a message we accept moves through the pipeline and reaches a final state, which is delivered,
-  bounced or failed.
-- Actual: the messages were accepted and stopped there, with no final state recorded and no error shown to
-  the customer.
-- The bug: accepted messages that never reached any final state at all. It's worth being clear about the
+- Expected: a message we accept moves through the pipeline and reaches some final delivery outcome, whether
+  that's delivered, bounced, failed or suppressed.
+- Actual: the messages were accepted and stopped there, with no outcome recorded and no error shown to the
+  customer.
+- The bug: accepted messages that never reached any outcome at all. It's worth being clear about the
   distinction, because `email.sent` is easy to misread as success. It means we took the request, not that we
   delivered anything. An email that bounces, or that's delayed by the receiving server, isn't a platform bug,
   because that happens after we've handed it off. Something we accepted and then never resolved either way
@@ -480,8 +492,9 @@ Why I think this is urgent even though sending has recovered:
    status page entry and a postmortem rather than a support reply.
 3. The customer is asking what happened and deserves a real answer. I'm holding them with an investigation
    update and have committed to coming back to them hourly.
-4. They can't safely resend the failed batch, because those magic links have expired, so "just send them
-   again" isn't available as a workaround, and they already know that.
+4. They may not be able to safely resend the failed batch, since magic links normally carry an expiry and we
+   don't yet know theirs, so "just send them again" may not be available as a workaround. I've asked them to
+   hold off until we've confirmed it.
 
 What I'm asking for: confirmation of the scope within the hour if that's possible, the root cause once it's
 known, and a decision on whether this needs a status page entry if it turns out to be wider than this one

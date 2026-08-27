@@ -26,8 +26,7 @@ with the invoice attached.
 
 **Until you verify a domain, Resend only lets you send to the email address you signed up with.**
 
-That is a deliberate anti-abuse measure, not a bug, and it is the single most common reason a first attempt
-returns a 403. You have two options:
+That is a deliberate anti-abuse measure, not a bug, and it is a common reason a first attempt returns a 403. You have two options:
 
 - **You own a domain:** add it at [resend.com/domains](https://resend.com/domains), add the DNS records it
   gives you, wait for verification, then send anywhere.
@@ -170,7 +169,8 @@ Three things worth knowing:
 **Styles are inline objects, not a stylesheet.** Email clients strip `<style>` blocks unpredictably, so
 everything is an inline style. This is not React Email being awkward, it is email being email.
 
-**Web fonts do not load.** Use a system font stack.
+**Web font support varies by client.** React Email ships a `<Font>` component and some clients honour it,
+but plenty do not, so pick a system font stack as the fallback and assume that is what most people will see.
 
 **`<Preview>` is the grey line next to the subject** in most inboxes. Leave it out and the client shows the
 first words of your body instead, which is rarely what you want.
@@ -263,7 +263,12 @@ export async function POST(request: Request) {
     react: BillingFailureEmail({}),
   });
 
-  if (error) return NextResponse.json({ error }, { status: 400 });
+  // Pass Resend's own status code through. Flattening everything to 400 throws
+  // away the difference between an auth problem, a bad payload and a rate limit.
+  if (error) {
+    const status = (error as { statusCode?: number }).statusCode ?? 502;
+    return NextResponse.json({ error }, { status });
+  }
   return NextResponse.json({ id: data?.id });
 }
 ```
@@ -298,8 +303,9 @@ await resend.emails.send({
 `content` takes a Buffer, or a base64 string, or you can pass a `path` and let Resend fetch it. A Buffer is
 the simplest thing that works when the file is already local.
 
-**The whole message, attachments included, must be under 40MB after Base64 encoding**, which is roughly a
-third smaller than 40MB of raw file. Not every file type is accepted. And **attachments do not work on the
+**The whole message, attachments included, must be under 40MB after Base64 encoding.** Base64 adds about a
+third to the size of a file, so 40MB encoded works out at roughly 30MB of raw file, and less than that once
+the rest of the message is counted. Not every file type is accepted. And **attachments do not work on the
 batch endpoint at all**, so anything with an invoice goes through the single-send path. If a file is large,
 link to it instead of attaching it.
 
@@ -317,7 +323,7 @@ Open [localhost:3000](http://localhost:3000), enter your address, send.
 
 This step is not optional and it is the habit worth forming. **A 200 from the API means Resend accepted the
 message, not that a mailbox accepted it.** The dashboard shows what happened next: delivered, bounced,
-deferred, complained. If you only ever check the API response, you will eventually tell a customer their
+delayed, complained. If you only ever check the API response, you will eventually tell a customer their
 email sent when it bounced an hour later.
 
 ---
@@ -342,9 +348,10 @@ so SPF can pass and align even though you never added an SPF record to the domai
 `Authentication-Results` header on a delivered message rather than reasoning from your DNS zone.
 
 **Separate transactional mail from marketing.** Use a different subdomain, for example `billing.yourdomain.com`
-for this and `news.yourdomain.com` for campaigns. Reputation is tracked per domain. **If a marketing send goes
-badly, you do not want it taking your payment emails to spam with it**, and a billing failure email landing in
-spam costs you the payment.
+for this and `news.yourdomain.com` for campaigns. Separating them helps segment your sending reputation,
+though it does not fully isolate one stream from the other, since receivers also weigh the parent domain.
+**If a marketing send goes badly, you do not want it dragging your payment emails towards spam**, and a
+billing failure email landing in spam costs you the payment.
 
 **Respect the rate limit.** The documented default is **10 requests per second per team**, shared across every
 API key on the team. **Do not hard-code that number.** Read the `ratelimit-limit`, `ratelimit-remaining` and
@@ -367,7 +374,7 @@ card before the subscription pauses. Do not queue it behind a campaign.
 | **403**, "The domain is not verified" | Domain added but DNS not propagated or records wrong | Check the records in the dashboard match your DNS exactly. Propagation can take a while |
 | **401** | Bad or missing API key | Check `.env.local` exists, the key starts with `re_`, and you restarted the dev server after adding it |
 | **422** | Validation failed | Usually a malformed `from`, a missing `to`, or no subject. The error body names the field |
-| **429**, "Too many requests" | You exceeded 2 requests per second | Batch, or add exponential backoff. Do not retry immediately in a loop |
+| **429**, "Too many requests" | You went over your team's current rate limit, which is shared across all its API keys | Pace your sends from the `ratelimit-*` headers and wait the `retry-after` value before retrying. Send an `Idempotency-Key` so a retry cannot duplicate. Do not batch this particular email, since the batch endpoint does not take attachments |
 | **500** from this app, "Missing RESEND_API_KEY" | `.env.local` not created, or the dev server was started before it existed | Create it, then restart `npm run dev`. Next.js reads env at startup |
 | Email sends, never arrives | It was accepted, then something happened downstream | Look it up in the dashboard by message id. Do not resend blindly, you will just send two |
 | Preview looks right, delivered email looks wrong | The client stripped your CSS | Keep styles inline and simple. Test in more than one client |
@@ -388,11 +395,18 @@ an alarming email into a manageable one, and it prevents a support ticket asking
 **Lead with reassurance.** "Your account is still active" is the first thing a customer wants to know. Getting
 it into the preview text means they know it before they even open the email.
 
-**Explain the likely cause.** Most declines are an expired card, a changed billing address, or a bank flagging
-a recurring charge. Saying so removes the assumption that something is wrong with your service.
+**Explain the likely cause.** Common possible reasons include an expired card, a changed billing address, or
+a bank flagging a recurring charge. Naming them as possibilities removes the assumption that something is
+wrong with your service. Do not assert a specific cause the system has not actually confirmed.
 
 **Attach the invoice.** They may need it for accounting, and asking them to log in to find it is one more
 step between you and the payment.
 
 **Make the reply go somewhere.** A no-reply address on a billing email is a way of telling someone with a
 payment problem that you do not want to hear from them.
+
+In this project that is `RESEND_REPLY_TO`, and it is optional, which is a trap worth naming. Leave it unset
+and it falls back to `RESEND_FROM`, which while you are still testing is `onboarding@resend.dev`, an address
+nobody reads. The email tells the customer that a person will read their reply, so set `RESEND_REPLY_TO` to a
+mailbox someone actually monitors before this goes near a real customer. The footer address and the reply
+address come from the same variable on purpose, so the two cannot drift apart.
