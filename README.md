@@ -9,8 +9,9 @@ code blocks paste as they are; the two that are abridged say so and link to the 
 **What you end up with:** a page with one input, and an API route that renders a React email and sends it
 with the invoice attached.
 
-*Part of a take-home for Resend. The customer-ticket exercise is in [TICKETS.md](TICKETS.md), and setup
-friction notes are in [STUMBLE_LOG.md](STUMBLE_LOG.md).*
+*Part of a take-home for Resend. The customer-ticket exercise is in
+**[Ivan_Dans_Resend_Tickets.pdf](Ivan_Dans_Resend_Tickets.pdf)** (also as
+[TICKETS.md](TICKETS.md)), and setup friction notes are in [STUMBLE_LOG.md](STUMBLE_LOG.md).*
 
 ---
 
