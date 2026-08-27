@@ -140,16 +140,16 @@ since that answers about half of these without needing anything from the custome
 >
 > `{ "statusCode": 403, "name": "...", "message": "..." }`
 >
-> The `name` field tells us exactly which case we're dealing with. Please don't include your API key when you
-> send it over, as I never need it in order to help you.
+> The `name` and `message` fields together tell us which documented case we're dealing with. Please don't
+> include your API key when you send it over, as I never need it in order to help you.
 >
 > While you're getting that, I'm checking your account from my side. The possible causes are an API key
 > that's inactive or suspended, an OAuth access token missing the scopes it needs, sending to addresses
 > other than your own before a domain is verified, or sending from a domain that hasn't been verified yet.
-> All of them are quick to fix once we know which one it is.
+> Each of them has a different next step, so identifying which one it is saves you trying fixes at random.
 >
 > One more thing that would help: if these errors started suddenly after everything had been working, let me
-> know roughly when. That timing usually points straight at the cause.
+> know roughly when. That timing can narrow things down considerably.
 >
 > Best,
 > Ivan
@@ -239,8 +239,10 @@ with previous emails. A single test send doesn't prove anything either way, and 
 that a message will land in the inbox.
 
 What I need in order to make progress is one email ID from a message that went to spam, and the raw headers
-of that message as it was received. The authentication results in those headers tell me whether this is an
-authentication problem or a reputation problem, and those two go in completely different directions.
+of that message as it was received. The authentication results in those headers tell me whether authentication
+is failing, which would be the first thing to fix. If it's passing, that rules authentication out and moves
+the investigation to content, domain reputation, list quality and engagement, which are slower to work
+through, so it's worth establishing early which side of that line we're on.
 
 I'd also check their domain verification and DMARC status from my side while I wait.
 
@@ -260,7 +262,7 @@ I'd also check their domain verification and DMARC status from my side while I w
 >
 > In the meantime, the factors that most often matter are these. Whether your domain's authentication is
 > passing and aligned. Whether the links inside the email point to your own sending domain rather than to a
-> third-party or shortened URL, because a mismatch there is something filters weigh heavily. Whether the
+> third-party or shortened URL, because a mismatch there can trigger spam filters. Whether the
 > domain is new, since a new domain sending a lot of email straight away is a common trigger. And for bulk
 > email to Gmail, whether you have one-click unsubscribe set up and how your spam complaint rate looks, which
 > you can see in Google Postmaster Tools.
@@ -291,8 +293,8 @@ The customer is partway through verifying a domain and has got stuck at the DNS 
 at Vercel. This is a quick one to answer.
 
 The mistake I'd expect here is pasting the full hostname into Vercel's Name field. Vercel adds the domain
-automatically, so pasting the whole thing creates a record with the domain repeated twice, verification
-fails, and nothing tells the customer why.
+automatically, so pasting the whole thing creates a record with the domain repeated twice and verification
+fails, and the saved record looks close enough to right that the customer has no reason to suspect it.
 
 Before answering I'd confirm that Vercel is actually where their DNS is hosted, since customers sometimes buy
 a domain in one place and host the DNS somewhere else.
@@ -312,8 +314,8 @@ a domain in one place and host the DNS somewhere else.
 > and open DNS Records. Add a record with the type set to TXT. In the Name field, enter only the part that
 > comes before your domain. So if Resend shows you `resend._domainkey.send.yourdomain.com`, the Name you
 > enter is `resend._domainkey.send`. Vercel adds your domain on the end automatically, and pasting the full
-> hostname is the most common reason verification fails, because it ends up creating the record with your
-> domain in it twice. Then paste the value exactly as Resend shows it, save, and click Verify back in Resend.
+> hostname is a common reason verification fails, because it ends up creating the record with your domain in
+> it twice. Then paste the value exactly as Resend shows it, save, and click Verify back in Resend.
 > It usually confirms within a few minutes.
 >
 > If it hasn't verified after half an hour or so, send me a screenshot of how the record looks saved in
@@ -468,9 +470,9 @@ no `email.suppressed`, for around four hours. The same request worked before the
   customer.
 - The bug: accepted messages that never reached any outcome at all. It's worth being clear about the
   distinction, because `email.sent` is easy to misread as success. It means we took the request, not that we
-  delivered anything. An email that bounces, or that's delayed by the receiving server, isn't a platform bug,
-  because that happens after we've handed it off. Something we accepted and then never resolved either way
-  is.
+  delivered anything. An email that bounces or gets delayed doesn't by itself establish a bug on our side,
+  because the receiving server can cause both. Something we accepted and then never resolved either way
+  can't be explained from the receiving end, which is what makes it ours.
 
 What I've been able to check so far:
 

@@ -355,7 +355,8 @@ billing failure email landing in spam costs you the payment.
 
 **Respect the rate limit.** The documented default is **10 requests per second per team**, shared across every
 API key on the team. **Do not hard-code that number.** Read the `ratelimit-limit`, `ratelimit-remaining` and
-`ratelimit-reset` headers, and back off using `retry-after` on a 429. Limits change; headers do not.
+`ratelimit-reset` headers, and back off using `retry-after` on a 429. The number can change; the headers
+describe whatever your limit currently is, so design around them instead.
 
 **And note the interaction with attachments**, because it catches people: the batch endpoint is the usual
 answer to volume, but **Resend does not support attachments on the batch endpoint**. An invoice email like
@@ -372,11 +373,11 @@ card before the subscription pauses. Do not queue it behind a campaign.
 |---|---|---|
 | **403**, "You can only send testing emails to your own email address" | New account, no verified domain | Send to your signup address, or verify a domain at [resend.com/domains](https://resend.com/domains) |
 | **403**, "The domain is not verified" | Domain added but DNS not propagated or records wrong | Check the records in the dashboard match your DNS exactly. Propagation can take a while |
-| **401** | Bad or missing API key | Check `.env.local` exists, the key starts with `re_`, and you restarted the dev server after adding it |
+| **401** | The request had no usable key. The documented causes are a missing key and a send-only key used on a non-sending endpoint | In this app it usually means the key never loaded: check `.env.local` exists, the key starts with `re_`, and you restarted the dev server after adding it |
 | **422** | Validation failed | Usually a malformed `from`, a missing `to`, or no subject. The error body names the field |
 | **429**, "Too many requests" | You went over your team's current rate limit, which is shared across all its API keys | Pace your sends from the `ratelimit-*` headers and wait the `retry-after` value before retrying. Send an `Idempotency-Key` so a retry cannot duplicate. Do not batch this particular email, since the batch endpoint does not take attachments |
 | **500** from this app, "Missing RESEND_API_KEY" | `.env.local` not created, or the dev server was started before it existed | Create it, then restart `npm run dev`. Next.js reads env at startup |
-| Email sends, never arrives | It was accepted, then something happened downstream | Look it up in the dashboard by message id. Do not resend blindly, you will just send two |
+| Email sends, never arrives | It was accepted, then something happened downstream | Look it up in the dashboard by message id before doing anything else. Resending blindly could deliver two if the first is merely delayed |
 | Preview looks right, delivered email looks wrong | The client stripped your CSS | Keep styles inline and simple. Test in more than one client |
 | `npm run email` stops on a prompt | `@react-email/ui` is not installed | `npm install --save-dev @react-email/ui` |
 

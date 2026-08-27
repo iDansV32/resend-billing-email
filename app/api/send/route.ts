@@ -79,8 +79,8 @@ export async function POST(request: Request) {
           content: invoice,
         },
       ],
-      // Tags are optional. They make the message findable in the dashboard later,
-      // which matters when someone asks "did this actually send?".
+      // Tags are optional. They ride along with the message and come back in
+      // webhook events, which helps when someone asks "did this actually send?".
       tags: [{ name: 'category', value: 'billing_failure' }],
     });
 

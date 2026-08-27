@@ -14,20 +14,23 @@ of anyone starting from `create-next-app` and following a Resend quickstart, but
 
 # Resend
 
-## 1. The sending restriction is discovered as an error, not stated as a rule
+## 1. The sending restriction itself is never stated, only implied
 
-**Confidence: high.** Reproduced directly.
+**Confidence: high** on the restriction, reproduced directly in August 2026. **Partially addressed in the
+current docs**, which changed under this note: as of late August 2026 the Next.js quickstart lists "a
+verified domain" in its prerequisites, which it did not spell out when I first hit this.
 
 New accounts can only send to the signup address until a domain is verified. This is sensible anti-abuse
-behaviour. The friction is where you learn it: following the quickstart, the natural first action is to send
-to a real address, and you find out through a 403. The message is clear once you read it, but by then you are
-debugging rather than following a tutorial, and you do not yet know whether you broke something.
+behaviour. What remains unstated is the rule itself and the second path. The prerequisite says you need a
+verified domain, yet the quickstart's own example code sends from `onboarding@resend.dev`, which is exactly
+the path you take when you do not have one. A reader without a domain follows the example, sends to a real
+address, and still finds out about the restriction through a 403 rather than a sentence.
 
-**Suggested change.** State it in the quickstart prerequisites, before the first code block, with both paths
-spelled out: verify a domain, or send to yourself from `onboarding@resend.dev`. Two sentences.
+**Suggested change.** One line next to the prerequisite: without a verified domain you can still follow the
+whole guide by sending from `onboarding@resend.dev` to your own signup address, and nowhere else.
 
-**Priority: highest of these.** It is early in the funnel, it looks like a failure rather than a rule, and it
-is entirely preventable with documentation.
+**Priority: highest of these**, though smaller than when I wrote it. It is early in the funnel and it still
+looks like a failure rather than a rule.
 
 ## 2. Nothing in the send flow signals that a 200 is not the end
 
@@ -115,7 +118,7 @@ Worth recording, since the point of this file is what actually happened.
 **I wrote that the default rate limit is 2 requests per second.** The documented default is **10 per second
 per team**. I had taken the number from an error string rather than from the reference, and did not check it.
 The right guidance is not a number at all: read `ratelimit-limit`, `ratelimit-remaining` and `ratelimit-reset`,
-and honour `retry-after`. Limits change, headers do not.
+and honour `retry-after`. The number can change, and the headers describe whatever it currently is.
 
 **I explained DMARC with the boolean backwards, then fixed it with an example that was also wrong.** The
 first version said DMARC applies "when SPF or DKIM fail". The correction claimed this project passes DMARC on
